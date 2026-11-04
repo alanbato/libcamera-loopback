@@ -1,0 +1,57 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+set -e
+
+UNIT=libcamera-loopback.service
+RELAYD=v4l2-relayd@default.service
+STATE=/var/lib/libcamera-loopback
+
+relayd_installed() {
+    [ -e /usr/lib/systemd/system/v4l2-relayd@.service ] || [ -e /lib/systemd/system/v4l2-relayd@.service ]
+}
+
+case "$1" in
+configure|abort-upgrade|abort-deconfigure|abort-remove)
+    # v4l2-relayd would fight us for the loopback device: mask its default
+    # instance, and remember that we did so postrm can undo it.
+    if relayd_installed && [ ! -L "/etc/systemd/system/$RELAYD" ]; then
+        if [ -d /run/systemd/system ]; then
+            deb-systemd-invoke stop "$RELAYD" v4l2-relayd.service >/dev/null 2>&1 || true
+        fi
+        mkdir -p "$STATE"
+        ln -sf /dev/null "/etc/systemd/system/$RELAYD"
+        touch "$STATE/masked-v4l2-relayd"
+    fi
+
+    deb-systemd-helper unmask "$UNIT" >/dev/null || true
+    if deb-systemd-helper --quiet was-enabled "$UNIT"; then
+        deb-systemd-helper enable "$UNIT" >/dev/null || true
+    else
+        deb-systemd-helper update-state "$UNIT" >/dev/null || true
+    fi
+    if [ -z "$2" ]; then
+        # first installation: enable by default
+        deb-systemd-helper enable "$UNIT" >/dev/null || true
+    fi
+
+    if [ -d /run/systemd/system ]; then
+        systemctl --system daemon-reload >/dev/null || true
+        deb-systemd-invoke restart "$UNIT" >/dev/null || true
+    fi
+
+    cat <<'MSG'
+
+libcamera-loopback is installed and enabled.
+ * v4l2loopback options were installed to /usr/lib/modprobe.d/libcamera-loopback.conf;
+   if the module was already loaded with other options, reboot to apply them.
+ * Settings: /etc/default/libcamera-loopback (then: systemctl restart libcamera-loopback)
+ * PipeWire only notices the camera after re-probing it. As your user, run
+   'systemctl --user restart wireplumber' (or log out and back in).
+ * Ubuntu 24.04's libcamera is too old for IPU6 cameras; see
+   /usr/share/doc/libcamera-loopback/README.md ("Building libcamera").
+
+MSG
+    ;;
+esac
+
+exit 0

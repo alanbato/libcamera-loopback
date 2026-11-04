@@ -35,8 +35,8 @@ by, the libcamera or v4l2loopback projects; the name just says what it connects.
   ```
   options v4l2loopback devices=1 exclusive_caps=1 card_label="Intel MIPI Camera"
   ```
-  (Ubuntu's IPU6 packages already set this up.) See also
-  [buffer count](#v4l2loopback-buffer-count) below.
+  (The .deb and AUR packages install this for you, and so do Ubuntu's IPU6
+  packages.) See also [buffer count](#v4l2loopback-buffer-count) below.
 - **libcamera with the software ISP and its GStreamer plugin (`libcamerasrc`)**.
   For IPU6 that means a recent libcamera (this was developed against **v0.8.0**);
   Ubuntu 24.04's libcamera 0.2 is too old. See [Building libcamera](#building-libcamera).
@@ -45,6 +45,41 @@ by, the libcamera or v4l2loopback projects; the name just says what it connects.
 - systemd.
 
 ## Install
+
+Pick **one** method. Don't mix a package with `install.sh`: the script's unit
+in `/etc/systemd/system` would shadow the package's.
+
+### Ubuntu / Debian (.deb)
+
+Download `libcamera-loopback_<version>_all.deb` from the
+[releases page](https://github.com/alanbato/libcamera-loopback/releases), then:
+
+```bash
+sudo apt install ./libcamera-loopback_0.1.0-1_all.deb
+systemctl --user restart wireplumber    # as your user, so PipeWire sees the camera
+```
+
+The package enables and starts the service, installs the v4l2loopback options
+(see [below](#v4l2loopback-buffer-count)) and masks `v4l2-relayd@default` if
+v4l2-relayd is installed; `sudo apt remove libcamera-loopback` undoes the mask.
+On Ubuntu 24.04 you still need a newer libcamera; see
+[Building libcamera](#building-libcamera).
+
+### Arch Linux (AUR)
+
+```bash
+yay -S libcamera-loopback          # or any AUR helper / makepkg
+sudo systemctl enable --now libcamera-loopback
+systemctl --user restart wireplumber
+```
+
+This uses Arch's own `libcamera`, `libcamera-ipa` and `gst-plugin-libcamera`
+(0.7.x at the time of writing, which includes the software ISP), so no source
+build should be needed. That combination hasn't been tested on real hardware
+yet; reports are welcome. The AGC patch below targets libcamera 0.8.0 and won't
+apply to 0.7.x. The packaging lives in [`packaging/arch`](packaging/arch).
+
+### From source (any distro)
 
 ```bash
 git clone https://github.com/alanbato/libcamera-loopback.git && cd libcamera-loopback
@@ -56,12 +91,16 @@ the service never runs code from your home directory), installs
 `libcamera-loopback.service`, writes default settings to `/etc/default/libcamera-loopback` (only if
 that file doesn't exist yet), stops and masks `v4l2-relayd@default` if it is
 installed, starts libcamera-loopback and restarts WirePlumber for your user.
+Unlike the packages, it doesn't install v4l2loopback module options; set them
+up as in [Requirements](#requirements).
 
 Re-run it after changing `libcamera-loopback.py`. Undo everything with:
 
 ```bash
 sudo ./install.sh --uninstall     # also unmasks and restarts v4l2-relayd if present
 ```
+
+To build the `.deb` yourself: `packaging/deb/build-deb.sh` (writes to `dist/`).
 
 ## Configuration
 
@@ -169,7 +208,8 @@ sudo ./set-loopback-buffers.sh 3   # persists in /etc/modprobe.d and reloads the
   doesn't seem specific to libcamera-loopback. Browsers and V4L2 apps are fine.
 - **Colours** from the uncalibrated software ISP are washed out or tinted until
   someone writes a tuning file for your sensor
-  (`/opt/libcamera/etc/libcamera/ipa/softisp/<sensor>.yaml`).
+  (`<prefix>/share/libcamera/ipa/softisp/<sensor>.yaml` on libcamera 0.8+,
+  `.../ipa/simple/<sensor>.yaml` before that).
 - The kernel may log a steady stream of `csi2-N error: Transfer FIFO overflow`
   while streaming on IPU6. It hasn't caused lost frames here.
 - x86_64 only: the ioctl structure layouts are hard-coded for it.

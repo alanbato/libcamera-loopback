@@ -5,24 +5,29 @@
 libcamera in a few variants and reports frame-arrival jitter: what makes a
 stream stutter even though it averages 30 fps. Restarts libcamera-loopback afterwards.
 
-Set LIBCAMERA_LIBDIR if libcamera isn't installed in /opt/libcamera."""
+Uses a source-built libcamera in /opt/libcamera if present (override with
+LIBCAMERA_LIBDIR), otherwise the distribution's libcamera."""
 import atexit, os, pwd, shutil, statistics, subprocess, sys, tempfile, time
 
 if os.geteuid() != 0:
     sys.exit("run with sudo")
 
+# A libcamera built from source (e.g. into /opt/libcamera) is used if present;
+# otherwise the distribution's libcamera.
 LC = os.environ.get("LIBCAMERA_LIBDIR", "/opt/libcamera/lib/x86_64-linux-gnu")
+CUSTOM_LC = os.path.isdir(LC)
 # The dynamic loader reads LD_LIBRARY_PATH only at process start, so re-exec
 # ourselves with the environment set (otherwise GStreamer can't load the
 # right libcamera plugin and may silently fall back to an older distro one).
 # GStreamer's plugin registry goes in a fresh private (0700, root-owned)
 # directory, never a predictable path in /tmp: this runs as root, and a
 # planted file or symlink there could redirect writes or poison the cache.
-if os.environ.get("LD_LIBRARY_PATH") != LC:
+if "JITTER_DIAG_TMPDIR" not in os.environ:
     tmp = tempfile.mkdtemp(prefix="jitter-diag-")
-    env = dict(os.environ, LD_LIBRARY_PATH=LC, GST_PLUGIN_PATH_1_0=f"{LC}/gstreamer-1.0",
-               GST_REGISTRY_1_0=os.path.join(tmp, "gst-registry.bin"),
+    env = dict(os.environ, GST_REGISTRY_1_0=os.path.join(tmp, "gst-registry.bin"),
                JITTER_DIAG_TMPDIR=tmp, LIBCAMERA_LOG_LEVELS="*:ERROR")
+    if CUSTOM_LC:
+        env.update(LD_LIBRARY_PATH=LC, GST_PLUGIN_PATH_1_0=f"{LC}/gstreamer-1.0")
     os.execve(sys.executable, [sys.executable, "-I", os.path.abspath(__file__)], env)
 
 
@@ -102,8 +107,10 @@ Gst.init(None)
 f = Gst.ElementFactory.find("libcamerasrc")
 print(f"libcamerasrc from: {f.get_plugin().get_filename() if f else 'NOT FOUND'}"
       f" (version {f.get_plugin().get_version() if f else '-'})", flush=True)
-if not f or not f.get_plugin().get_filename().startswith(LC):
-    sys.exit("wrong/missing libcamerasrc plugin; aborting")
+if not f:
+    sys.exit("libcamerasrc (libcamera's GStreamer plugin) not found; aborting")
+if CUSTOM_LC and not f.get_plugin().get_filename().startswith(LC):
+    sys.exit(f"expected the libcamerasrc plugin from {LC}; aborting")
 subprocess.run(["systemctl", "stop", "libcamera-loopback"])
 time.sleep(2)
 try:

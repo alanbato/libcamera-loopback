@@ -1,0 +1,43 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+set -e
+
+UNIT=libcamera-loopback.service
+RELAYD=v4l2-relayd@default.service
+STATE=/var/lib/libcamera-loopback
+
+case "$1" in
+remove|purge)
+    # Undo the v4l2-relayd mask, but only if we created it.
+    if [ -e "$STATE/masked-v4l2-relayd" ]; then
+        if [ "$(readlink "/etc/systemd/system/$RELAYD" 2>/dev/null)" = /dev/null ]; then
+            rm -f "/etc/systemd/system/$RELAYD"
+        fi
+        rm -f "$STATE/masked-v4l2-relayd"
+        rmdir "$STATE" 2>/dev/null || true
+        RESTART_RELAYD=1
+    fi
+    if [ -d /run/systemd/system ]; then
+        systemctl --system daemon-reload >/dev/null || true
+        if [ -n "${RESTART_RELAYD:-}" ] && [ -e /usr/lib/systemd/system/v4l2-relayd@.service ]; then
+            deb-systemd-invoke start v4l2-relayd.service "$RELAYD" >/dev/null 2>&1 || true
+        fi
+    fi
+    ;;
+esac
+
+if [ "$1" = remove ]; then
+    if [ -x "/usr/bin/deb-systemd-helper" ]; then
+        deb-systemd-helper mask "$UNIT" >/dev/null || true
+    fi
+fi
+
+if [ "$1" = purge ]; then
+    if [ -x "/usr/bin/deb-systemd-helper" ]; then
+        deb-systemd-helper purge "$UNIT" >/dev/null || true
+        deb-systemd-helper unmask "$UNIT" >/dev/null || true
+    fi
+    rm -rf /var/cache/libcamera-loopback
+fi
+
+exit 0

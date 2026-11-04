@@ -1,0 +1,38 @@
+# Maintainer: Alan Velasco <dev@alanbato.com>
+pkgname=libcamera-loopback
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="On-demand libcamera to v4l2loopback webcam relay for MIPI/IPU6 laptop cameras"
+arch=('any')
+url="https://github.com/alanbato/libcamera-loopback"
+license=('AGPL-3.0-or-later')
+depends=('python' 'python-gobject' 'glib2' 'gstreamer' 'gst-plugins-base'
+         'libcamera' 'libcamera-ipa' 'gst-plugin-libcamera' 'V4L2LOOPBACK-MODULE')
+backup=('etc/default/libcamera-loopback')
+install=libcamera-loopback.install
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+# The real checksum is filled in on the AUR copy once GitHub has generated the
+# v$pkgver tarball (this file is part of that tarball, so it can't contain it).
+sha256sums=('SKIP')
+
+package() {
+  cd "$pkgname-$pkgver"
+  local lib="$pkgdir/usr/lib/$pkgname"
+
+  install -Dm755 libcamera-loopback.py "$lib/libcamera-loopback.py"
+  install -Dm755 set-loopback-buffers.sh "$lib/set-loopback-buffers.sh"
+  install -Dm755 tools/frame-timing.py "$lib/tools/frame-timing.py"
+  install -Dm755 tools/jitter-diag.py "$lib/tools/jitter-diag.py"
+
+  install -d "$pkgdir/usr/lib/systemd/system"
+  sed 's|/usr/local/lib/libcamera-loopback/|/usr/lib/libcamera-loopback/|' \
+    libcamera-loopback.service > "$pkgdir/usr/lib/systemd/system/$pkgname.service"
+  chmod 644 "$pkgdir/usr/lib/systemd/system/$pkgname.service"
+
+  install -Dm644 libcamera-loopback.default "$pkgdir/etc/default/$pkgname"
+  install -Dm644 packaging/common/modprobe.conf "$pkgdir/usr/lib/modprobe.d/$pkgname.conf"
+  install -Dm644 packaging/common/modules-load.conf "$pkgdir/usr/lib/modules-load.d/$pkgname.conf"
+  install -Dm644 patches/libcamera-softisp-agc-hysteresis.patch \
+    "$pkgdir/usr/share/$pkgname/patches/libcamera-softisp-agc-hysteresis.patch"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

@@ -1,0 +1,25 @@
+post_install() {
+  cat <<'MSG'
+==> libcamera-loopback: to start using it
+      sudo systemctl enable --now libcamera-loopback.service
+    v4l2loopback options were installed to /usr/lib/modprobe.d/libcamera-loopback.conf
+    and the module is loaded at boot. Reboot (or reload v4l2loopback) to apply them.
+    If you use v4l2-relayd (AUR), disable it: it competes for the same device.
+    Settings: /etc/default/libcamera-loopback
+    PipeWire only notices the camera after re-probing it; as your user, run
+      systemctl --user restart wireplumber
+    Optional: patches/libcamera-softisp-agc-hysteresis.patch in /usr/share/libcamera-loopback
+    fixes stutter on sensors behind slow I2C buses, but targets libcamera 0.8.0;
+    Arch's libcamera may be older (the module was renamed simple -> softisp in 0.8).
+MSG
+}
+
+post_upgrade() {
+  if systemctl is-active --quiet libcamera-loopback.service; then
+    echo "==> restart libcamera-loopback to use the new version: sudo systemctl restart libcamera-loopback"
+  fi
+}
+
+pre_remove() {
+  systemctl disable --now libcamera-loopback.service >/dev/null 2>&1 || true
+}

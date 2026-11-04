@@ -1,0 +1,24 @@
+Package: libcamera-loopback
+Version: @VERSION@
+Architecture: all
+Maintainer: Alan Velasco <dev@alanbato.com>
+Installed-Size: @SIZE@
+Depends: python3, python3-gi, gir1.2-gstreamer-1.0, gstreamer1.0-plugins-base, kmod
+Suggests: v4l2loopback-dkms, gstreamer1.0-libcamera
+Section: video
+Priority: optional
+Homepage: https://github.com/alanbato/libcamera-loopback
+Description: on-demand libcamera to v4l2loopback webcam relay
+ Feeds a v4l2loopback device from a libcamera camera (via GStreamer's
+ libcamerasrc), so that browsers, video-call apps and PipeWire can use MIPI
+ laptop cameras, such as those on Intel IPU6 laptops, like a regular webcam.
+ The camera is only started while an application is reading from the device.
+ .
+ It is a drop-in replacement for v4l2-relayd that writes frames with write(),
+ which avoids crashes and frozen video in applications reading from the
+ loopback device. If v4l2-relayd is installed, its default instance is masked
+ while this package is installed.
+ .
+ Requires the v4l2loopback kernel module and a libcamera with the software
+ ISP and its GStreamer plugin. Ubuntu 24.04's libcamera is too old for IPU6;
+ see /usr/share/doc/libcamera-loopback/README.md for building a newer one.
