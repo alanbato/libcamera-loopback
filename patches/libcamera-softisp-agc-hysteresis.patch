@@ -1,0 +1,95 @@
+Subject: [PATCH] ipa: softisp: optional AGC write hysteresis for slow sensor buses
+
+The software ISP's AGC pushes new exposure/gain values to the sensor on every
+frame. DelayedControls writes them synchronously in the pipeline thread at
+frame start. On sensors whose I2C goes through a slow bridge (e.g. the
+OmniVision OV01A10 on Dell XPS 13 Plus / IPU6 laptops, via a USB LJCA bridge,
+5-10 ms per write) this stalls frame delivery: the stream still averages
+30 fps but frames arrive in bunches (63 gaps >50 ms in 12 s, p95 115 ms).
+
+When LIBCAMERA_SOFTISP_AGC_HYSTERESIS=<fraction> is set (e.g. 0.05), only send
+new values when exposure or gain changed by more than that fraction since the
+last write. With 0.05: 0 gaps >50 ms, p95 36.6 ms, auto exposure still works.
+Unset or 0 keeps the upstream behaviour.
+
+Applies to libcamera v0.8.0:  cd libcamera && git apply /path/to/this.patch
+
+SPDX-License-Identifier: LGPL-2.1-or-later
+(A modification of libcamera, so it is under libcamera's license, not libcamera-loopback's.)
+---
+diff --git a/src/ipa/softisp/softisp.cpp b/src/ipa/softisp/softisp.cpp
+index 00249a3..3996c5b 100644
+--- a/src/ipa/softisp/softisp.cpp
++++ b/src/ipa/softisp/softisp.cpp
+@@ -6,7 +6,9 @@
+  */
+ 
+ #include <chrono>
++#include <cmath>
+ #include <stdint.h>
++#include <stdlib.h>
+ #include <sys/mman.h>
+ 
+ #include <linux/v4l2-controls.h>
+@@ -82,6 +84,19 @@ private:
+ 
+ 	/* Local parameter storage */
+ 	struct IPAContext context_;
++
++	/*
++	 * Local patch (libcamera-loopback): AGC write hysteresis. Sensor control writes
++	 * are synchronous in the pipeline thread; on sensors behind a slow I2C
++	 * bridge (e.g. ov01a10 via USB LJCA) writing exposure/gain every frame
++	 * stalls frame delivery and makes the stream stutter. With
++	 * LIBCAMERA_SOFTISP_AGC_HYSTERESIS=<fraction> (e.g. 0.05), new values
++	 * are only sent when exposure or gain changed by more than that
++	 * fraction since the last write. Unset/0 = upstream behaviour.
++	 */
++	double agcHysteresis_ = 0.0;
++	uint32_t lastSentExposure_ = 0;
++	double lastSentGain_ = 0.0;
+ };
+ 
+ IPASoftIsp::~IPASoftIsp()
+@@ -211,6 +226,16 @@ int IPASoftIsp::configure(const IPAConfigInfo &configInfo, ControlInfoMap *ipaCo
+ 
+ int IPASoftIsp::start()
+ {
++	/* Local patch: AGC write hysteresis, see class definition. */
++	const char *h = getenv("LIBCAMERA_SOFTISP_AGC_HYSTERESIS");
++	agcHysteresis_ = h ? strtod(h, nullptr) : 0.0;
++	if (!(agcHysteresis_ > 0.0 && agcHysteresis_ < 1.0))
++		agcHysteresis_ = 0.0;
++	lastSentExposure_ = 0; /* force the first write */
++	lastSentGain_ = 0.0;
++	if (agcHysteresis_ > 0.0)
++		LOG(IPASoftIsp, Info) << "AGC write hysteresis " << agcHysteresis_;
++
+ 	return 0;
+ }
+ 
+@@ -253,9 +278,22 @@ void IPASoftIsp::processStats(const uint32_t frame,
+ 		algo->process(context_, frame, frameContext, stats_, metadata);
+ 	metadataReady.emit(frame, metadata);
+ 
++	const uint32_t exposure = frameContext.agc.exposure;
++	const double gain = frameContext.agc.gain;
++
++	/* Local patch: skip tiny AGC corrections, see class definition. */
++	if (agcHysteresis_ > 0.0 && lastSentExposure_ > 0 && lastSentGain_ > 0.0) {
++		const double dExp = std::abs(static_cast<double>(exposure) - lastSentExposure_) /
++				    lastSentExposure_;
++		const double dGain = std::abs(gain - lastSentGain_) / lastSentGain_;
++		if (dExp < agcHysteresis_ && dGain < agcHysteresis_)
++			return;
++	}
++	lastSentExposure_ = exposure;
++	lastSentGain_ = gain;
++
+ 	ControlList ctrls(context_.sensorControls);
+-	agc::prepareControls(ctrls, context_.camHelper.get(),
+-			     frameContext.agc.exposure, frameContext.agc.gain);
++	agc::prepareControls(ctrls, context_.camHelper.get(), exposure, gain);
+ 	setSensorControls.emit(ctrls);
+ }
+ 

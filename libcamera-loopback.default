@@ -1,0 +1,30 @@
+# libcamera-loopback settings. install.sh copies this to /etc/default/libcamera-loopback if that
+# file doesn't exist yet; later runs leave your edits alone.
+# After editing:  sudo systemctl restart libcamera-loopback
+#                 systemctl --user restart wireplumber   (as your user, see README)
+
+# Card label of the v4l2loopback device to feed (as in /sys/class/video4linux/*/name).
+# Leave empty to use --device from LOOPBACK_ARGS instead (default /dev/video0).
+LOOPBACK_LABEL=Intel MIPI Camera
+
+# GStreamer source pipeline (may contain spaces, e.g. "libcamerasrc saturation=1.2").
+# Empty means libcamerasrc. Use "videotestsrc is-live=true" to test without a camera.
+LOOPBACK_SOURCE=libcamerasrc
+
+# Other options (no spaces inside values here; systemd splits this on whitespace):
+# --width/--height/--fps, --format YUY2|NV12, --linger SECONDS, --stats SECONDS.
+LOOPBACK_ARGS=--width 1280 --height 720 --fps 30 --format YUY2 --linger 3
+
+# Where libcamera (with its GStreamer plugin) is installed. These are needed when
+# libcamera is built from source into /opt/libcamera (see README); remove them to
+# use a distribution libcamera instead. GST_PLUGIN_PATH is searched before the
+# system plugin directory, so this libcamerasrc wins over an older distro one.
+LD_LIBRARY_PATH=/opt/libcamera/lib/x86_64-linux-gnu
+GST_PLUGIN_PATH_1_0=/opt/libcamera/lib/x86_64-linux-gnu/gstreamer-1.0
+GST_REGISTRY_1_0=/var/cache/libcamera-loopback/gst-registry.bin
+LIBCAMERA_LOG_LEVELS=*:WARN
+
+# Only takes effect with patches/libcamera-softisp-agc-hysteresis.patch applied:
+# skip sensor exposure/gain writes that change by less than 5%. This fixes
+# stutter on sensors behind slow I2C buses (e.g. USB LJCA on IPU6 laptops).
+LIBCAMERA_SOFTISP_AGC_HYSTERESIS=0.05

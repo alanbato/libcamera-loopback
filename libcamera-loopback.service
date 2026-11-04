@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Installed by install.sh to /etc/systemd/system/libcamera-loopback.service.
+# Settings live in /etc/default/libcamera-loopback.
+[Unit]
+Description=libcamera-loopback: on-demand libcamera -> v4l2loopback webcam relay
+After=systemd-modules-load.service
+ConditionPathExists=/sys/module/v4l2loopback
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/libcamera-loopback
+CacheDirectory=libcamera-loopback
+ExecStart=/usr/bin/python3 -I /usr/local/lib/libcamera-loopback/libcamera-loopback.py --label "${LOOPBACK_LABEL}" --source "${LOOPBACK_SOURCE}" $LOOPBACK_ARGS
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
