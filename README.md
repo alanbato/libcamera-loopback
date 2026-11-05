@@ -35,7 +35,7 @@ by, the libcamera or v4l2loopback projects; the name just says what it connects.
   ```
   options v4l2loopback devices=1 exclusive_caps=1 card_label="Intel MIPI Camera"
   ```
-  (The .deb and AUR packages install this for you, and so do Ubuntu's IPU6
+  (The .deb and Arch packages install this for you, and so do Ubuntu's IPU6
   packages.) See also [buffer count](#v4l2loopback-buffer-count) below.
 - **libcamera with the software ISP and its GStreamer plugin (`libcamerasrc`)**.
   For IPU6 that means a recent libcamera (this was developed against **v0.8.0**);
@@ -65,10 +65,15 @@ v4l2-relayd is installed; `sudo apt remove libcamera-loopback` undoes the mask.
 On Ubuntu 24.04 you still need a newer libcamera; see
 [Building libcamera](#building-libcamera).
 
-### Arch Linux (AUR)
+### Arch Linux
+
+Not on the AUR yet (AUR account registration is currently closed). Build the
+package from the PKGBUILD in this repository instead:
 
 ```bash
-yay -S libcamera-loopback          # or any AUR helper / makepkg
+git clone https://github.com/alanbato/libcamera-loopback.git
+cd libcamera-loopback/packaging/arch
+makepkg -si                        # builds the v0.1.0 release and installs it
 sudo systemctl enable --now libcamera-loopback
 systemctl --user restart wireplumber
 ```
